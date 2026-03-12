@@ -55,5 +55,19 @@ public class WarehouseSimulation {
         trolleyPool.releaseTrolley(tb);
         trolleyPool.releaseTrolley(tc);
         System.out.println("released all 3 trolleys");
+
+        Section section = new Section(10);
+        System.out.println(section.getBoxCount());
+        System.out.println(section.isEmpty());
+
+
+        section.startStocking();
+        section.stockMultiple(5);
+        section.endStocking();
+
+        System.out.println(section.getBoxCount());
+
+        System.out.println(section.isEmpty());
+        System.out.println(section.getAvailableSpace());
     }
 }

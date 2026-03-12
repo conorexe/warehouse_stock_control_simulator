@@ -69,5 +69,35 @@ public class WarehouseSimulation {
 
         System.out.println(section.isEmpty());
         System.out.println(section.getAvailableSpace());
+
+        Thread picker1 = new Thread(() -> {
+            try {
+                int waited = section.pick();
+                System.out.println(waited + " ticks");
+                int waited2 = section.pick();
+                System.out.println(waited2 + " ticks");
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        });
+
+        Thread picker2 = new Thread(() -> {
+            try {
+                int waited = section.pick();
+                System.out.println(waited + " ticks");
+                int waited2 = section.pick();
+                System.out.println(waited2 + " ticks");
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        });
+
+        picker1.start();
+        picker2.start();
+
+        picker1.join();
+        picker2.join();
+
+        System.out.println(section.getWaitingPickersCount());
     }
 }

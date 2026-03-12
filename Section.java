@@ -1,6 +1,7 @@
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.Condition;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class Section {
     private final Lock lock = new ReentrantLock();
@@ -10,6 +11,7 @@ public class Section {
     private volatile boolean stockerActive = false;
     private int count = 0;
     private int capacity = 0;
+    private AtomicInteger waitingPickers = new AtomicInteger(0);
 
     public void startStocking() throws InterruptedException {
         lock.lock();
@@ -88,4 +90,41 @@ public class Section {
             return false;
         }
     }
+
+    public int pick() throws InterruptedException {
+        waitingPickers.incrementAndGet();
+        lock.lock();
+        long tick = simulator_clock.getInstance().getCurrentTick();
+
+        try {
+            while(stockerActive) {
+                stockerFinished.await();
+            }
+
+            while(count == 0) {
+                boxAvailable.await();
+            }
+
+            count--;
+            spaceAvailable.signal();
+
+        }
+        finally {
+            lock.unlock();
+            waitingPickers.decrementAndGet();
+        }
+
+        simulator_clock.getInstance().waitOneTick();
+        int ticksWaited = (int)(simulator_clock.getInstance().getCurrentTick() - tick);
+
+        return ticksWaited;
+    }
+
+    public int getWaitingPickersCount(){
+        return waitingPickers.get();
+    }
+
+
+
+
 }

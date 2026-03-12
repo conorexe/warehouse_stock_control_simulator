@@ -29,5 +29,31 @@ public class WarehouseSimulation {
         System.out.println(trolley.getTotalLoad());
         System.out.println(trolley.isEmpty());
         */
+
+        TrolleyPool trolleyPool = new TrolleyPool(3, 10);
+        Trolley trolley = trolleyPool.getTrolley();
+        System.out.println("Acquired: " + trolley.id);
+
+        trolley.addBoxes(BoxType.ELECTRONICS, 3);
+        try {
+            trolleyPool.releaseTrolley(trolley);
+        } catch (IllegalStateException e) {
+            System.out.println(e.getMessage());
+        }
+
+        trolley.removeOneBox(BoxType.ELECTRONICS);
+        trolley.removeOneBox(BoxType.ELECTRONICS);
+        trolley.removeOneBox(BoxType.ELECTRONICS);
+        trolleyPool.releaseTrolley(trolley);
+        System.out.println("Trolley released successfully");
+
+        Trolley ta = trolleyPool.getTrolley();
+        Trolley tb = trolleyPool.getTrolley();
+        Trolley tc = trolleyPool.getTrolley();
+        System.out.println("Acquired all 3 trolleys");
+        trolleyPool.releaseTrolley(ta);
+        trolleyPool.releaseTrolley(tb);
+        trolleyPool.releaseTrolley(tc);
+        System.out.println("released all 3 trolleys");
     }
 }

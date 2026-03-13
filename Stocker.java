@@ -1,4 +1,5 @@
 import java.util.EnumMap;
+import java.util.Map.Entry;
 
 public class Stocker implements Runnable {
 
@@ -68,7 +69,12 @@ public class Stocker implements Runnable {
         while(!trolley.isEmpty()) {
             BoxType section = findNextSection(trolley);
             if (section == null) {
-                waitForAnyRelevantSpace(trolley, clock);
+                if (trolley.getAvailableSpace() > 0 && stagingHasUsefulBoxes()) {
+                    returnToStagingForMore(trolley, clock);
+                }
+                else {
+                    waitForAnyRelevantSpace(trolley, clock);
+                }
             }
             else {
                 moveToSection(section.getName(), trolley, clock);
@@ -156,5 +162,31 @@ public class Stocker implements Runnable {
         }
 
         return bestType;
+    }
+
+    private boolean stagingHasUsefulBoxes() {
+        EnumMap<BoxType, Integer> snapshot = stagingArea.getBoxSnapshot();
+
+        for (Entry<BoxType, Integer> entry : snapshot.entrySet()) {
+            BoxType box = entry.getKey();
+            int count = entry.getValue();
+            Section section = sections.get(box);
+            if (count > 0 && !section.isFull()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void returnToStagingForMore(Trolley trolley, simulator_clock clock) throws InterruptedException {
+        moveToStaging(trolley, clock);
+        stagingArea.tryAcquireExclusive();
+        try {
+            stagingArea.takeBoxes(trolley, trolley.getAvailableSpace(), sections);
+            logger.logStockerLoad(clock.getCurrentTick(), tid, trolley.getBoxes(), trolley.getTotalLoad());
+        }
+        finally {
+            stagingArea.releaseFromTaking();
+        }
     }
 }

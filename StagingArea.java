@@ -5,7 +5,6 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-
 public class StagingArea {
 
     private final EnumMap<BoxType, Integer> boxes = new EnumMap<>(BoxType.class);
@@ -15,8 +14,7 @@ public class StagingArea {
     private final Condition stockerDone    = lock.newCondition();
 
     private volatile boolean stockerTaking = false;
-
-    private volatile boolean shutdownFlag = false;
+    private volatile boolean shutdownFlag  = false;
 
     public StagingArea() {
         for (BoxType type : BoxType.values()) {
@@ -24,8 +22,7 @@ public class StagingArea {
         }
     }
 
-
-    /* Blocks until stocker has  access and boxes are available.*/
+    /* Blocks until stocker has exclusive access and boxes are available. */
     public void acquireForTaking() throws InterruptedException {
         lock.lock();
         try {
@@ -37,7 +34,6 @@ public class StagingArea {
                     return;
                 }
 
-
                 if (stockerTaking) {
                     stockerDone.await();
                 } else {
@@ -48,7 +44,6 @@ public class StagingArea {
             lock.unlock();
         }
     }
-
 
     public void tryAcquireExclusive() throws InterruptedException {
         lock.lock();
@@ -66,8 +61,7 @@ public class StagingArea {
         }
     }
 
-    /**
-     * Waits until at least one box is present. */
+    /** Waits until at least one box is present. */
     public void waitForBoxes() throws InterruptedException {
         lock.lock();
         try {
@@ -80,7 +74,7 @@ public class StagingArea {
         }
     }
 
-    /*adds boxes and wakes waiting stockers. */
+    /* Adds boxes and wakes waiting stockers. */
     public void addDelivery(EnumMap<BoxType, Integer> delivery) {
         lock.lock();
         try {
@@ -95,7 +89,7 @@ public class StagingArea {
         }
     }
 
-    /* Releases exclusive stocker access and wakes any threads waiting for for for new boxes */
+    /* Releases exclusive stocker access and wakes waiting threads. */
     public void releaseFromTaking() {
         lock.lock();
         try {
@@ -115,7 +109,6 @@ public class StagingArea {
         for (BoxType type : BoxType.values()) taken.put(type, 0);
 
         int remaining = Math.min(maxBoxes, trolley.getAvailableSpace());
-
         BoxType[] order = getPriorityOrder(sections);
 
         lock.lock();
@@ -141,11 +134,10 @@ public class StagingArea {
         }
 
         simulator_clock.getInstance().waitOneTick();
-
         return taken;
     }
 
-    /* Returns the five boxes types sorted by stocking priority */
+    /* Returns the five box types sorted by stocking priority */
     BoxType[] getPriorityOrder(EnumMap<BoxType, Section> sections) {
         BoxType[] types = BoxType.values();
         Arrays.sort(types, Comparator.comparingInt(
@@ -156,7 +148,7 @@ public class StagingArea {
                 }).reversed()
             .thenComparing(t -> {
                 Section s = sections.get(t);
-                return (s == null || s.isEmpty()) ? 0 : 1;  // empty first
+                return (s == null || s.isEmpty()) ? 0 : 1;
             })
             .thenComparingInt(t -> {
                 Section s = sections.get(t);
@@ -165,7 +157,8 @@ public class StagingArea {
         );
         return types;
     }
-    /** Return true if any box type has at least one box. */
+
+    /** Returns true if any box type has at least one box. */
     public boolean hasBoxes() {
         for (int n : boxes.values()) {
             if (n > 0) return true;
@@ -180,7 +173,6 @@ public class StagingArea {
         return total;
     }
 
-
     public EnumMap<BoxType, Integer> getBoxSnapshot() {
         lock.lock();
         try {
@@ -190,7 +182,7 @@ public class StagingArea {
         }
     }
 
-    /*Signals all waiting threads to wake up and check for shutdown.*/
+    /* Signals all waiting threads to wake up and check for shutdown. */
     public void shutdown() {
         lock.lock();
         try {

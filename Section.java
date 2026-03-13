@@ -85,9 +85,8 @@ public class Section {
         }
     }
 
-
-// Picking side
-    /* waits for no active stocker/ boxes available, return ticks waits for stock */
+    // Picking side
+    /* waits for no active stocker and boxes available, returns ticks waited for stock */
     public long pickBox() throws InterruptedException {
         waitingPickers.incrementAndGet();
         long startTick = simulator_clock.getInstance().getCurrentTick();
@@ -114,8 +113,7 @@ public class Section {
         return waitedTicks;
     }
 
- 
-    /** Wakes all blocked threads so they can detect shutdown*/
+    /** Wakes all blocked threads so they can detect shutdown */
     public void shutdown() {
         lock.lock();
         try {
@@ -127,13 +125,12 @@ public class Section {
         }
     }
 
-    
     // Query methods
-    public int  getBoxCount()         { return boxCount; }
-    public int  getCapacity()         { return capacity; }
-    public int  getAvailableSpace()   { return capacity - boxCount; }
-    public boolean isEmpty()          { return boxCount == 0; }
-    public boolean isFull()           { return boxCount >= capacity; }
-    public boolean isStockerActive()  { return stockerActive; }
+    public int  getBoxCount()            { return boxCount; }
+    public int  getCapacity()            { return capacity; }
+    public int  getAvailableSpace()      { return capacity - boxCount; }
+    public boolean isEmpty()             { return boxCount == 0; }
+    public boolean isFull()              { return boxCount >= capacity; }
+    public boolean isStockerActive()     { return stockerActive; }
     public int  getWaitingPickersCount() { return waitingPickers.get(); }
 }

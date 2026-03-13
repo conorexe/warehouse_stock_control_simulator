@@ -65,12 +65,38 @@ public class Stocker implements Runnable {
 
     /* Iterates box types to stock each section with boxes waiting on the trolley. */
     private void stockAllBoxes(Trolley trolley, simulator_clock clock) throws InterruptedException {
-        for (BoxType type : BoxType.values()) {
-            if (trolley.getBoxCount(type) > 0) {
-                moveToSection(type.getName(), trolley, clock);
-                stockSection(type, trolley, clock);
+        while(!trolley.isEmpty()) {
+            BoxType section = findNextSection(trolley);
+            if (section == null) {
+                waitForAnyRelevantSpace(trolley, clock);
+            }
+            else {
+                moveToSection(section.getName(), trolley, clock);
+                stockSection(section, trolley, clock);
             }
         }
+    }
+
+    private void waitForAnyRelevantSpace(Trolley trolley, simulator_clock clock) throws InterruptedException {
+        Section  section = null;
+        int best = -1;
+        BoxType bestType = null;
+        for (BoxType box : BoxType.values()) {
+            if (trolley.getBoxCount(box) != 0) {
+                Section s = sections.get(box);
+                int score = calculatePriority(s);
+                if (score > best) {
+                    section = s;
+                    best = score;
+                    bestType = box;
+                }
+            }
+        }
+        if (section == null) {
+            return;
+        }
+        logger.logWaitingForSpace(clock.getCurrentTick(), tid, bestType.getName());
+        section.waitForSpaceWithTimeout(20);
     }
 
     /* Travel time */
@@ -106,5 +132,29 @@ public class Stocker implements Runnable {
         } finally {
             section.releaseFromStocking();
         }
+    }
+
+    private int calculatePriority(Section section) {
+        int score = (section.getWaitingPickersCount() * 100) + (section.isEmpty() ? 50 : 0) + (section.getAvailableSpace());
+        return score;
+    }
+
+    private BoxType findNextSection(Trolley trolley){
+        int best = -1;
+        BoxType bestType = null;
+        for (BoxType box : BoxType.values()) {
+            if (trolley.getBoxCount(box) != 0) {
+                Section s = sections.get(box);
+                if (!s.isFull()) {
+                    int score = calculatePriority(s);
+                    if (score > best){
+                        best = score;
+                        bestType = box;
+                    }
+                }
+            }
+        }
+
+        return bestType;
     }
 }

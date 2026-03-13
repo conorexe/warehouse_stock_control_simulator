@@ -1,5 +1,6 @@
 import java.util.EnumMap;
 import java.util.Map.Entry;
+import java.util.Random;
 
 public class Stocker implements Runnable {
 
@@ -8,6 +9,9 @@ public class Stocker implements Runnable {
     private final EnumMap<BoxType, Section> sections;
     private final TrolleyPool               trolleyPool;
     private final Logger                    logger;
+    private long lastBreakTick = 0;
+    private int nextBreakInterval;
+    private final Random random = new Random();
 
     // Tracks where the stocker is.
     private String currentLocation = "staging";
@@ -19,6 +23,7 @@ public class Stocker implements Runnable {
         this.sections     = sections;
         this.trolleyPool  = trolleyPool;
         this.logger       = logger;
+        this.nextBreakInterval = calculateNextBreakInterval();
     }
 
     @Override
@@ -30,18 +35,28 @@ public class Stocker implements Runnable {
                 // get trolley
                 long startTick   = clock.getCurrentTick();
                 trolley          = trolleyPool.getTrolley();
+                if (!clock.mclock_status()) {
+                    break;
+                }
                 long waitedTicks = clock.getCurrentTick() - startTick;
                 logger.logAcquireTrolley(clock.getCurrentTick(), tid, trolley.id, waitedTicks);
 
                 // Load boxes, stock all sections, then return
                 loadFromStaging(trolley, clock);
                 stockAllBoxes(trolley, clock);
+                if (!clock.mclock_status()) {
+                    break;
+                }
                 moveToStaging(trolley, clock);
 
                 // Release trolley 
                 logger.logReleaseTrolley(clock.getCurrentTick(), tid, trolley.id, trolley.getTotalLoad());
                 trolleyPool.releaseTrolley(trolley);
                 trolley = null;
+
+                if (shouldTakeBreak(clock)) {
+                    takeBreak(clock);
+                }
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -49,6 +64,7 @@ public class Stocker implements Runnable {
             // return trolley even on interrupt
             if (trolley != null) {
                 trolley.clear();
+                logger.logReleaseTrolley(clock.getCurrentTick(), tid, trolley.id, 0);
                 trolleyPool.releaseTrolley(trolley);
             }
         }
@@ -188,5 +204,31 @@ public class Stocker implements Runnable {
         finally {
             stagingArea.releaseFromTaking();
         }
+    }
+
+    private boolean shouldTakeBreak(simulator_clock clock)  {
+        return (clock.getCurrentTick() - lastBreakTick >= nextBreakInterval);
+    }
+
+    private int calculateNextBreakInterval() {
+        return 200 + random.nextInt(101);
+    }
+
+    private void takeBreak(simulator_clock clock) throws InterruptedException {
+        logger.logBreakStart(clock.getCurrentTick(), tid, 150);
+        try {
+            clock.waitTicks(150);
+        }
+        catch (InterruptedException e) {
+            logger.logBreakEnd(clock.getCurrentTick(), tid);
+            lastBreakTick = clock.getCurrentTick();
+            Thread.currentThread().interrupt();
+            nextBreakInterval = calculateNextBreakInterval();
+            return;
+        }
+
+        logger.logBreakEnd(clock.getCurrentTick(), tid);
+        lastBreakTick = clock.getCurrentTick();
+        nextBreakInterval = calculateNextBreakInterval();
     }
 }

@@ -6,13 +6,15 @@ public class Config {
 
     private long   tickDurationMs         = 100;
     private int    simulationDurationTicks = 480;
-    private double deliveryProbability    = 0.30;
-    private int    sectionCapacity        = 100;
+    private double deliveryProbability    = 0.01;
+    private int    sectionCapacity        = 10;
     private int    numStockers            = 2;
     private int    numPickers             = 4;
-    private int    trolleyCapacity        = 20;
+    private int    trolleyCapacity        = 10;
+    // -1 means "use default formula: floor((numStockers + numPickers) / 2)"
+    private int    numTrolleys            = -1;
     private int    breakInterval          = 120;
-    private int    targetPicksPerDay      = 1000;
+    private int    targetPicksPerDay      = 100;
     private long   randomSeed             = 42;
 
     public static Config loadFromFile(String path) throws IOException {
@@ -36,6 +38,8 @@ public class Config {
             cfg.numPickers = Integer.parseInt(props.getProperty("numPickers").trim());
         if (props.containsKey("trolleyCapacity"))
             cfg.trolleyCapacity = Integer.parseInt(props.getProperty("trolleyCapacity").trim());
+        if (props.containsKey("numTrolleys"))
+            cfg.numTrolleys = Integer.parseInt(props.getProperty("numTrolleys").trim());
         if (props.containsKey("breakInterval"))
             cfg.breakInterval = Integer.parseInt(props.getProperty("breakInterval").trim());
         if (props.containsKey("targetPicksPerDay"))
@@ -50,11 +54,14 @@ public class Config {
         return (double) targetPicksPerDay / (1000.0 * numPickers);
     }
 
+    /** Returns K (trolley count). Uses the explicit numTrolleys value if set in config,
+     *  otherwise falls back to the spec default: floor((numStockers + numPickers) / 2). */
     public int getNumTrolleys() {
-        return (numStockers + numPickers) / 2;
+        return (numTrolleys > 0) ? numTrolleys : (numStockers + numPickers) / 2;
     }
 
     public void printSummary() {
+        boolean usingDefault = (numTrolleys <= 0);
         System.out.printf("  tickDurationMs         : %d ms%n",    tickDurationMs);
         System.out.printf("  simulationDurationTicks: %d%n",       simulationDurationTicks);
         System.out.printf("  deliveryProbability    : %.2f%n",     deliveryProbability);
@@ -62,7 +69,8 @@ public class Config {
         System.out.printf("  numStockers (S)        : %d%n",       numStockers);
         System.out.printf("  numPickers  (P)        : %d%n",       numPickers);
         System.out.printf("  trolleyCapacity        : %d%n",       trolleyCapacity);
-        System.out.printf("  numTrolleys (S+P)/2    : %d%n",       getNumTrolleys());
+        System.out.printf("  numTrolleys            : %d%s%n",     getNumTrolleys(),
+                          usingDefault ? " (default: floor((S+P)/2))" : " (explicit)");
         System.out.printf("  breakInterval          : %d ticks%n", breakInterval);
         System.out.printf("  targetPicksPerDay      : %d%n",       targetPicksPerDay);
         System.out.printf("  pickRatePerTick        : %.6f%n",     getPickRatePerTick());
@@ -89,6 +97,10 @@ public class Config {
 
     public int    getTrolleyCapacity()               { return trolleyCapacity; }
     public void   setTrolleyCapacity(int v)          { trolleyCapacity = v; }
+
+    /** Explicitly override the trolley count. Pass -1 to restore the default formula. */
+    public int    getNumTrolleysOverride()           { return numTrolleys; }
+    public void   setNumTrolleys(int v)              { numTrolleys = v; }
 
     public int    getBreakInterval()                 { return breakInterval; }
     public void   setBreakInterval(int v)            { breakInterval = v; }

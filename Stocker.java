@@ -9,20 +9,28 @@ public class Stocker implements Runnable {
     private final EnumMap<BoxType, Section> sections;
     private final TrolleyPool               trolleyPool;
     private final Logger                    logger;
-    private long lastBreakTick = 0;
-    private int nextBreakInterval;
-    private final Random random = new Random();
+    private final Statistics                stats;
 
-    // Tracks where the stocker is.
+    // Break scheduling — interval is randomised in [breakIntervalBase, breakIntervalBase + 100]
+    private final int  breakIntervalBase;
+    private final Random random;
+    private long lastBreakTick    = 0;
+    private int  nextBreakInterval;
+
+    // Tracks where the stocker currently is (for move-event logging).
     private String currentLocation = "staging";
 
     public Stocker(String tid, StagingArea stagingArea, EnumMap<BoxType, Section> sections,
-                   TrolleyPool trolleyPool, Logger logger) {
-        this.tid          = tid;
-        this.stagingArea  = stagingArea;
-        this.sections     = sections;
-        this.trolleyPool  = trolleyPool;
-        this.logger       = logger;
+                   TrolleyPool trolleyPool, Logger logger, Statistics stats,
+                   int breakIntervalBase, long seed) {
+        this.tid               = tid;
+        this.stagingArea       = stagingArea;
+        this.sections          = sections;
+        this.trolleyPool       = trolleyPool;
+        this.logger            = logger;
+        this.stats             = stats;
+        this.breakIntervalBase = breakIntervalBase;
+        this.random            = new Random(seed);
         this.nextBreakInterval = calculateNextBreakInterval();
     }
 
@@ -71,6 +79,10 @@ public class Stocker implements Runnable {
     }
 
     private void loadFromStaging(Trolley trolley, simulator_clock clock) throws InterruptedException {
+        // Log before blocking so the output shows when waiting begins, not when it ends.
+        if (stagingArea.isBlockedForTaking()) {
+            logger.logWaitingAtStaging(clock.getCurrentTick(), tid);
+        }
         stagingArea.acquireForTaking();
         try {
             stagingArea.takeBoxes(trolley, trolley.getAvailableSpace(), sections);
@@ -150,6 +162,7 @@ public class Stocker implements Runnable {
                 stocked++;
             }
 
+            stats.recordStocked(type, stocked);
             logger.logStockEnd(clock.getCurrentTick(), tid, type.getName(), stocked, trolley.getTotalLoad(), trolley.id);
         } finally {
             section.releaseFromStocking();
@@ -196,12 +209,19 @@ public class Stocker implements Runnable {
 
     private void returnToStagingForMore(Trolley trolley, simulator_clock clock) throws InterruptedException {
         moveToStaging(trolley, clock);
+        // Re-check after travel: staging may have emptied while we were in transit.
+        if (!stagingHasUsefulBoxes()) {
+            return;
+        }
         stagingArea.tryAcquireExclusive();
         try {
+            int loadBefore = trolley.getTotalLoad();
             stagingArea.takeBoxes(trolley, trolley.getAvailableSpace(), sections);
-            logger.logStockerLoad(clock.getCurrentTick(), tid, trolley.getBoxes(), trolley.getTotalLoad());
-        }
-        finally {
+            // Only log if we actually picked up new boxes.
+            if (trolley.getTotalLoad() > loadBefore) {
+                logger.logStockerLoad(clock.getCurrentTick(), tid, trolley.getBoxes(), trolley.getTotalLoad());
+            }
+        } finally {
             stagingArea.releaseFromTaking();
         }
     }
@@ -211,10 +231,12 @@ public class Stocker implements Runnable {
     }
 
     private int calculateNextBreakInterval() {
-        return 200 + random.nextInt(101);
+        // Spread breaks randomly over [breakIntervalBase, breakIntervalBase + 100] ticks.
+        return breakIntervalBase + random.nextInt(101);
     }
 
     private void takeBreak(simulator_clock clock) throws InterruptedException {
+        stats.recordBreak();
         logger.logBreakStart(clock.getCurrentTick(), tid, 150);
         try {
             clock.waitTicks(150);

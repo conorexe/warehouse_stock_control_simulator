@@ -1,103 +1,145 @@
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Random;
+
 public class WarehouseSimulation {
 
+    private final Config         config;
+    private final Logger         logger;
+    private final simulator_clock clock;
+
+    private StagingArea               stagingArea;
+    private TrolleyPool               trolleyPool;
+    private EnumMap<BoxType, Section> sections;
+    private Statistics                statistics;
+
+    private Thread       clockThread;
+    private Thread       deliveryThread;
+    private final List<Thread> stockerThreads = new ArrayList<>();
+    private final List<Thread> pickerThreads  = new ArrayList<>();
+
+    public WarehouseSimulation(Config config) {
+        this.config = config;
+        this.logger = new Logger();
+        simulator_clock.reset();
+        simulator_clock.initialize(config.getTickDurationMs());
+        this.clock = simulator_clock.getInstance();
+    }
+
+    public void setConsoleOutput(boolean enabled) {
+        logger.setConsoleOutput(enabled);
+    }
+
+    public void start() {
+        Random seeder = new Random(config.getRandomSeed());
+
+        // Shared resources — spec: each section begins with 5 boxes
+        sections = new EnumMap<>(BoxType.class);
+        for (BoxType type : BoxType.values()) {
+            Section s = new Section(config.getSectionCapacity());
+            s.initializeBoxes(5);
+            sections.put(type, s);
+        }
+        stagingArea = new StagingArea();
+        trolleyPool = new TrolleyPool(config.getNumTrolleys(), config.getTrolleyCapacity());
+        statistics  = new Statistics();
+
+        // Clock thread: sleeps for full simulation duration then stops the clock
+        long durationMs = (long) config.getSimulationDurationTicks() * config.getTickDurationMs();
+        clockThread = new Thread(() -> {
+            try {
+                Thread.sleep(durationMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            clock.stop();
+        }, "clock");
+        clockThread.setDaemon(true);
+        clockThread.start();
+
+        // Delivery thread
+        deliveryThread = new Thread(
+            new DeliverySystem(stagingArea, logger,
+                config.getDeliveryProbability(), 10, seeder.nextLong()),
+            "DEL");
+        deliveryThread.start();
+
+        // Stocker threads
+        for (int i = 0; i < config.getNumStockers(); i++) {
+            String tid = "S" + (i + 1);
+            Thread t = new Thread(
+                new Stocker(tid, stagingArea, sections, trolleyPool, logger,
+                    statistics, config.getBreakInterval(), seeder.nextLong()), tid);
+            stockerThreads.add(t);
+            t.start();
+        }
+
+        // Picker threads
+        Picker.resetPickIdCounter();
+        for (int i = 0; i < config.getNumPickers(); i++) {
+            String tid = "P" + (i + 1);
+            Thread t = new Thread(
+                new Picker(tid, sections, trolleyPool, logger,
+                    statistics, config.getPickRatePerTick(), seeder.nextLong()), tid);
+            pickerThreads.add(t);
+            t.start();
+        }
+    }
+
+    public void waitForCompletion() throws InterruptedException {
+        clockThread.join();
+        shutdown();
+    }
+
+    private void shutdown() throws InterruptedException {
+        clock.stop();
+
+        // Wake all threads blocked on shared resources
+        stagingArea.shutdown();
+        for (Section s : sections.values()) s.shutdown();
+
+        // Interrupt all worker threads
+        deliveryThread.interrupt();
+        for (Thread t : stockerThreads) t.interrupt();
+        for (Thread t : pickerThreads)  t.interrupt();
+
+        // Join with 1-second timeout each
+        deliveryThread.join(1000);
+        for (Thread t : stockerThreads) t.join(1000);
+        for (Thread t : pickerThreads)  t.join(1000);
+    }
+
+    public void printStatistics() {
+        statistics.print(config.getSimulationDurationTicks());
+
+        // Final snapshot of section and staging state.
+        System.out.println("\n=== End-of-run Snapshot ===");
+        for (BoxType type : BoxType.values()) {
+            Section s = sections.get(type);
+            System.out.printf("  section=%-12s boxes=%d/%d waiting_pickers=%d%n",
+                type.getName(), s.getBoxCount(), s.getCapacity(), s.getWaitingPickersCount());
+        }
+        System.out.printf("  staging total_boxes=%d%n", stagingArea.getTotalBoxes());
+    }
+
     public static void main(String[] args) throws Exception {
-        String configPath = (args.length > 0) ? args[0] : "warehouse.properties";
+        String  configPath = "warehouse.properties";
+        boolean noConsole  = false;
+
+        for (String arg : args) {
+            if      (arg.equals("--no-console")) noConsole = true;
+            else if (!arg.startsWith("--"))      configPath = arg;
+        }
 
         Config config = Config.loadFromFile(configPath);
         config.printSummary();
 
-       
-        simulator_clock.initialize(config.getTickDurationMs());
-        System.out.println("Clock: " + config.getTickDurationMs() + " ms/tick.");
+        WarehouseSimulation sim = new WarehouseSimulation(config);
+        if (noConsole) sim.setConsoleOutput(false);
 
-        /*
-        Logger logger = new Logger();
-        logger.logDelivery(1, 3, 2, 0, 4, 1);
-        logger.setConsoleOutput(false);
-
-        logger.logDelivery(2, 5, 1, 3, 0, 2);
-        logger.setConsoleOutput(true);
-        logger.logDelivery(3, 0, 0, 0, 0, 0);
-        */
-
-        /*
-        Trolley trolley = new Trolley(1, 10);
-
-        trolley.addBoxes(BoxType.ELECTRONICS, 3);
-        System.out.println(trolley.getTotalLoad());
-        trolley.removeOneBox(BoxType.ELECTRONICS);
-        System.out.println(trolley.getTotalLoad());
-        System.out.println(trolley.isEmpty());
-        */
-
-        TrolleyPool trolleyPool = new TrolleyPool(3, 10);
-        Trolley trolley = trolleyPool.getTrolley();
-        System.out.println("Acquired: " + trolley.id);
-
-        trolley.addBoxes(BoxType.ELECTRONICS, 3);
-        try {
-            trolleyPool.releaseTrolley(trolley);
-        } catch (IllegalStateException e) {
-            System.out.println(e.getMessage());
-        }
-
-        trolley.removeOneBox(BoxType.ELECTRONICS);
-        trolley.removeOneBox(BoxType.ELECTRONICS);
-        trolley.removeOneBox(BoxType.ELECTRONICS);
-        trolleyPool.releaseTrolley(trolley);
-        System.out.println("Trolley released successfully");
-
-        Trolley ta = trolleyPool.getTrolley();
-        Trolley tb = trolleyPool.getTrolley();
-        Trolley tc = trolleyPool.getTrolley();
-        System.out.println("Acquired all 3 trolleys");
-        trolleyPool.releaseTrolley(ta);
-        trolleyPool.releaseTrolley(tb);
-        trolleyPool.releaseTrolley(tc);
-        System.out.println("released all 3 trolleys");
-
-        Section section = new Section(10);
-        System.out.println(section.getBoxCount());
-        System.out.println(section.isEmpty());
-
-
-        section.acquireForStocking();
-        section.stockBoxes(5);
-        section.releaseFromStocking();
-
-        System.out.println(section.getBoxCount());
-
-        System.out.println(section.isEmpty());
-        System.out.println(section.getAvailableSpace());
-
-        Thread picker1 = new Thread(() -> {
-            try {
-                long waited = section.pickBox();
-                System.out.println(waited + " ticks");
-                long waited2 = section.pickBox();
-                System.out.println(waited2 + " ticks");
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        });
-
-        Thread picker2 = new Thread(() -> {
-            try {
-                long waited = section.pickBox();
-                System.out.println(waited + " ticks");
-                long waited2 = section.pickBox();
-                System.out.println(waited2 + " ticks");
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        });
-
-        picker1.start();
-        picker2.start();
-
-        picker1.join();
-        picker2.join();
-
-        System.out.println(section.getWaitingPickersCount());
+        sim.start();
+        sim.waitForCompletion();
+        sim.printStatistics();
     }
 }

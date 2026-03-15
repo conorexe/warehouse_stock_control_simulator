@@ -8,17 +8,19 @@ public class Picker implements Runnable {
     private final EnumMap<BoxType, Section> sections;
     private final TrolleyPool               trolleyPool;
     private final Logger                    logger;
+    private final Statistics                stats;
     private final double                    pickRatePerTick;
     private final Random                    random;
 
     private static final AtomicInteger pickIdCounter = new AtomicInteger(0);
 
     public Picker(String tid, EnumMap<BoxType, Section> sections, TrolleyPool trolleyPool,
-                  Logger logger, double pickRatePerTick, long seed) {
+                  Logger logger, Statistics stats, double pickRatePerTick, long seed) {
         this.tid             = tid;
         this.sections        = sections;
         this.trolleyPool     = trolleyPool;
         this.logger          = logger;
+        this.stats           = stats;
         this.pickRatePerTick = pickRatePerTick;
         this.random          = new Random(seed);
     }
@@ -72,6 +74,7 @@ public class Picker implements Runnable {
                 throw e;
             }
 
+            stats.recordPick(type, waitedTicks);
             logger.logPickDone(clock.getCurrentTick(), tid, pickId, type.getName(), waitedTicks, trolley.id);
         } finally {
 

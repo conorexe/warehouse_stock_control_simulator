@@ -21,6 +21,16 @@ public class Section {
         this.capacity = capacity;
     }
 
+    /** Pre-populate with initial stock without tick delays (used at simulation start). */
+    public void initializeBoxes(int count) {
+        lock.lock();
+        try {
+            boxCount = Math.min(count, capacity);
+        } finally {
+            lock.unlock();
+        }
+    }
+
     /* Blocks until no other stocker is active */
     public void acquireForStocking() throws InterruptedException {
         lock.lock();
@@ -45,12 +55,13 @@ public class Section {
         }
     }
 
-    /* increments count inside the lock */
+    
     public void stockOneBox() throws InterruptedException {
         lock.lock();
         try {
-            while (isFull()) {
-                spaceAvailable.await();
+            if (isFull()) {
+                // Should never happen: stockSection() checks !isFull() before calling here.
+                throw new IllegalStateException("stockOneBox called on a full section");
             }
             boxCount++;
             boxAvailable.signal();
@@ -58,13 +69,6 @@ public class Section {
             lock.unlock();
         }
         simulator_clock.getInstance().waitOneTick();
-    }
-
-    /* Stocks boxes one at a time. */
-    public void stockBoxes(int count) throws InterruptedException {
-        for (int i = 0; i < count; i++) {
-            stockOneBox();
-        }
     }
 
     /**

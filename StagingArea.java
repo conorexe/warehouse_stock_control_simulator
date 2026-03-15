@@ -61,14 +61,12 @@ public class StagingArea {
         }
     }
 
-    /** Waits until at least one box is present. */
-    public void waitForBoxes() throws InterruptedException {
+    /** Returns true if a stocker calling acquireForTaking() right now would have to wait
+     *  (i.e. another stocker is already taking, or staging is empty). Used for logging. */
+    public boolean isBlockedForTaking() {
         lock.lock();
         try {
-            while (!hasBoxes() && !shutdownFlag) {
-                boxesAvailable.await();
-            }
-            if (shutdownFlag) throw new InterruptedException("StagingArea shut down");
+            return stockerTaking || !hasBoxes();
         } finally {
             lock.unlock();
         }

@@ -4,9 +4,9 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.Condition;
 
 public class TrolleyPool {
-    private static final LinkedList<Trolley> trolleyPool = new LinkedList<Trolley>();
-    private static final Lock lock = new ReentrantLock();
-    private static final Condition trolleyAvailable = lock.newCondition();
+    private final LinkedList<Trolley> trolleyPool = new LinkedList<Trolley>();
+    private final Lock lock = new ReentrantLock();
+    private final Condition trolleyAvailable = lock.newCondition();
 
     public Trolley getTrolley() throws InterruptedException {
         lock.lock();

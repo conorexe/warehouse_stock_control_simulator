@@ -158,6 +158,9 @@ public class Stocker implements Runnable {
             int stocked = 0;
             while (trolley.getBoxCount(type) > 0 && !section.isFull()) {
                 section.stockOneBox();
+                ///
+                //simulator_clock.getInstance().waitOneTick();
+                ///
                 trolley.removeOneBox(type);
                 stocked++;
             }

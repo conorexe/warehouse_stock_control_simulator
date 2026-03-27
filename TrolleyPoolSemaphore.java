@@ -1,20 +1,19 @@
 import java.util.LinkedList;
-import java.util.concurrent.locks.Lock;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
 
-public class TrolleyPool {
+public class TrolleyPoolSemaphore {
     private final LinkedList<Trolley> trolleyPool = new LinkedList<Trolley>();
     private final Lock lock = new ReentrantLock(true);
-    private final Condition trolleyAvailable = lock.newCondition();
+    //private final Condition trolleyAvailable = lock.newCondition();
+    private final Semaphore semaphore;
 
     public Trolley getTrolley() throws InterruptedException {
+        semaphore.acquire();
         lock.lock();
 
         try {
-            while (trolleyPool.size() == 0) {
-                trolleyAvailable.await();
-            }
 
             return trolleyPool.removeFirst();
         }
@@ -32,14 +31,15 @@ public class TrolleyPool {
             }
 
             trolleyPool.addLast(trolley);
-            trolleyAvailable.signal();
         }
         finally {
             lock.unlock();
         }
+        semaphore.release();
     }
 
-    public TrolleyPool(int num, int capacity) {
+    public TrolleyPoolSemaphore(int num, int capacity) {
+        semaphore = new Semaphore(num, true);
         for (int i = 0; i < num; i++) {
             Trolley trolley = new Trolley(i, capacity);
             trolleyPool.add(trolley);

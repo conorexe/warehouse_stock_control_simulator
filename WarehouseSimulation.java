@@ -110,6 +110,20 @@ public class WarehouseSimulation {
         for (Thread t : pickerThreads)  t.join(1000);
     }
 
+    public EnumMap<BoxType, Section> getSections()  { return sections; }
+    public StagingArea               getStagingArea() { return stagingArea; }
+    public Statistics                getStatistics() { return statistics; }
+    public Config                    getConfig()     { return config; }
+    public long getCurrentTick() {
+        return clock != null ? clock.getCurrentTick() : 0L;
+    }
+    public boolean isRunning() {
+        return clockThread != null && clockThread.isAlive();
+    }
+    public void stopNow() {
+        if (clockThread != null) clockThread.interrupt();
+    }
+
     public void printStatistics() {
         statistics.print(config.getSimulationDurationTicks());
 

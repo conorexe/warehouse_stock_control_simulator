@@ -38,6 +38,13 @@ public class Statistics {
         totalBreaks.incrementAndGet();
     }
 
+    public long getTotalPicks()          { return totalPicks.get(); }
+    public long getTotalPickWaitTicks()  { return totalPickWaitTicks.get(); }
+    public long getTotalBoxesStocked()   { return totalBoxesStocked.get(); }
+    public long getTotalBreaks()         { return totalBreaks.get(); }
+    public long getPicksFor(BoxType t)   { return picksPerSection.get(t).get(); }
+    public long getStockedFor(BoxType t) { return boxesStockedPerSection.get(t).get(); }
+
     public void print(long simulationTicks) {
         long   picks    = totalPicks.get();
         long   waitSum  = totalPickWaitTicks.get();
